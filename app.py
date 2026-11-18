@@ -17,11 +17,7 @@ st.set_page_config(
 # CONEXIÓN A GOOGLE SHEETS
 # ============================================================
 def get_gsheet_client():
-    """Crea cliente de Google Sheets usando credenciales de secrets.toml"""
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
+    scopes = [...]
     creds = Credentials.from_service_account_info(
         dict(st.secrets["gcp_service_account"]),
         scopes=scopes
