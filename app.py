@@ -1,8 +1,7 @@
 import streamlit as st
-import gspread
-from google.oauth2.service_account import Credentials
-from datetime import datetime
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+from datetime import datetime
 
 # ============================================================
 # CONFIGURACIÓN DE PÁGINA
@@ -14,31 +13,27 @@ st.set_page_config(
 )
 
 # ============================================================
-# CONEXIÓN A GOOGLE SHEETS (VERSIÓN SIMPLIFICADA)
+# CONEXIÓN Y GUARDADO CON ST-GSHEETS-CONNECTION
 # ============================================================
-def get_gsheet_client():
-    """Crea cliente de Google Sheets usando el diccionario de secretos"""
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
-    
-    # Obtenemos el diccionario de secretos tal cual
-    creds_info = dict(st.secrets["gcp_service_account"])
-    
-    # Creamos las credenciales directamente
-    creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
-    return gspread.authorize(creds)
-
 def guardar_respuesta(poblacion, datos):
-    """Guarda una fila en la hoja correspondiente según la población"""
+    """Guarda una fila usando la conexión nativa de Streamlit para Google Sheets"""
     try:
-        client = get_gsheet_client()
-        sheet = client.open_by_key(st.secrets["sheet_id"])
-        worksheet = sheet.worksheet(poblacion)
-        fila = [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), poblacion]
-        fila.extend(datos.values())
-        worksheet.append_row(fila)
+        # 1. Conectar a Google Sheets usando los secrets
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        
+        # 2. Leer los datos existentes de la hoja (ttl=0 fuerza a leer datos frescos)
+        df_existente = conn.read(worksheet=poblacion, ttl=0)
+        
+        # 3. Crear el diccionario con la nueva fila
+        nueva_fila = {"Fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Poblacion": poblacion}
+        nueva_fila.update(datos)
+        
+        # 4. Agregar la nueva fila al DataFrame existente
+        df_nuevo = pd.concat([df_existente, pd.DataFrame([nueva_fila])], ignore_index=True)
+        
+        # 5. Actualizar (sobrescribir) la hoja con el nuevo DataFrame
+        conn.update(worksheet=poblacion, data=df_nuevo)
+        
         return True
     except Exception as e:
         st.error(f"Error al guardar: {e}")
@@ -56,7 +51,6 @@ if "enviado" not in st.session_state:
 # UTILIDAD DE VALIDACIÓN
 # ============================================================
 def validar_campos(obligatorios, nombre_formulario):
-    """Valida que los campos obligatorios tengan respuesta"""
     faltantes = [campo for campo, valor in obligatorios.items() if valor is None or valor == "" or valor == []]
     if faltantes:
         st.error(f"⚠️ Faltan campos obligatorios en {nombre_formulario}: {', '.join(faltantes)}")
