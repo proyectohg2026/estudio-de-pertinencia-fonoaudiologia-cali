@@ -3,6 +3,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import pandas as pd
+import re
 
 # ============================================================
 # CONFIGURACIÓN DE PÁGINA
@@ -14,14 +15,40 @@ st.set_page_config(
 )
 
 # ============================================================
-# CONEXIÓN A GOOGLE SHEETS
+# CONEXIÓN A GOOGLE SHEETS (CON LIMPIEZA DE LLAVE)
 # ============================================================
 def get_gsheet_client():
-    scopes = [...]
-    creds = Credentials.from_service_account_info(
-        dict(st.secrets["gcp_service_account"]),
-        scopes=scopes
-    )
+    """Crea cliente de Google Sheets usando credenciales de secrets.toml"""
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    
+    # Obtenemos los secretos y creamos una copia
+    creds_info = dict(st.secrets["gcp_service_account"])
+    
+    # --- LIMPIEZA DE LA LLAVE PRIVADA ---
+    if "private_key" in creds_info:
+        raw_key = creds_info["private_key"]
+        
+        # 1. Reemplazar los \n literales por saltos de línea reales
+        if "\\n" in raw_key:
+            raw_key = raw_key.replace("\\n", "\n")
+            
+        # 2. Extraer solo el cuerpo base64 (eliminando cabeceras y espacios)
+        if "-----BEGIN PRIVATE KEY-----" in raw_key:
+            raw_key = raw_key.replace("-----BEGIN PRIVATE KEY-----", "")
+        if "-----END PRIVATE KEY-----" in raw_key:
+            raw_key = raw_key.replace("-----END PRIVATE KEY-----", "")
+            
+        # 3. Eliminar cualquier espacio o salto de línea residual dentro del cuerpo
+        cuerpo_limpio = re.sub(r"\s+", "", raw_key)
+        
+        # 4. Reconstruir la llave con el formato PEM exacto
+        creds_info["private_key"] = f"-----BEGIN PRIVATE KEY-----\n{cuerpo_limpio}\n-----END PRIVATE KEY-----\n"
+    # ------------------------------------
+
+    creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
     return gspread.authorize(creds)
 
 def guardar_respuesta(poblacion, datos):
